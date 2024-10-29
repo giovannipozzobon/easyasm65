@@ -98,7 +98,7 @@ sys_to_easyasm:
     map
     eom
 
-    ; Set B = $1Exx
+    ; Set Base Page = $1Exx
     lda #$1e
     tab
     rts
@@ -112,7 +112,7 @@ easyasm_to_sys:
     map
     eom
 
-    ; Restore B.
+    ; Restore  Base Page
     lda #$00
     tab
     rts

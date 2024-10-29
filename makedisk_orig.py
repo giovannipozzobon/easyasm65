@@ -67,7 +67,7 @@ TODO:
 """
 
 import codecs
-#import d64  # type: ignore
+import d64  # type: ignore
 import json
 import pathlib
 import os
@@ -244,6 +244,47 @@ def main(args):
             petscii_encode, petscii_decode, name='petscii'))
 
     fdata = FileData.from_file(args[0])
- 
+    d64.DiskImage.create(
+        type_name='d81',
+        filepath=pathlib.Path(fdata.disk_filename),
+        disk_name=fdata.disk_name_pt,
+        disk_id=fdata.disk_id_pt)
+    with d64.DiskImage(
+            filepath=pathlib.Path(fdata.disk_filename), mode='w') as disk:
+        for fspec in fdata.files:
+            basename, ext = os.path.splitext(
+                os.path.basename(fspec.get('file_path', '')))
+
+            name = fspec.get('name')
+            if name is None:
+                name = basename
+            name_pt = name.encode('petscii')
+
+            ftype = 'SEQ'
+            data = b''
+            if ext:
+                ftype = FILE_FORMATS[ext]['type']
+                with open(fspec['file_path'], 'rb') as content_fh:
+                    data = content_fh.read()
+                    if 'converter' in FILE_FORMATS[ext]:
+                        data = FILE_FORMATS[ext]['converter'](
+                            data, fspec, fdata)
+
+            if 'file_path' in fspec:
+                # Find the path on the disk to avoid creating a duplicate.
+                dos_path = disk.path(name_pt)
+            else:
+                # Use the DOSPath constructor directly to allow for duplicate
+                # names on the disk.
+                dos_path = d64.DOSPath(disk, name=name_pt)
+            with dos_path.open(mode='w', ftype=ftype) as fh:
+                fh.write(data)
+
+    with d64.DiskImage(
+            filepath=pathlib.Path(fdata.disk_filename), mode='r') as disk:
+        for line in disk.directory():
+            print(line)
+
+
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))

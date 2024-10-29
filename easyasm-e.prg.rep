@@ -1,0 +1,134 @@
+
+; ******** Source: easyasm-e.asm
+     1                          ; EasyAsm, an assembler for the MEGA65
+     2                          ; Copyright © 2024  Dan Sanderson
+     3                          ;
+     4                          ; This program is free software: you can redistribute it and/or modify
+     5                          ; it under the terms of the GNU General Public License as published by
+     6                          ; the Free Software Foundation, either version 3 of the License, or
+     7                          ; (at your option) any later version.
+     8                          ;
+     9                          ; This program is distributed in the hope that it will be useful,
+    10                          ; but WITHOUT ANY WARRANTY; without even the implied warranty of
+    11                          ; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    12                          ; GNU General Public License for more details.
+    13                          ;
+    14                          ; You should have received a copy of the GNU General Public License
+    15                          ; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+    16                          ;
+    17                          ; ---------------------------------------------------------
+    18                          ; easyasm-e : Dispatch routines
+    19                          ; ---------------------------------------------------------
+    20                          
+    21                          !cpu m65
+    22                          
+    23                          ; EasyAsm uses page $1E00-$1EFF for dispatch code and variable space.
+    24                          ; Set EXPECTED_END_OF_DISPATCH according to BP variables declared in
+    25                          ; easyasm.asm. (On error, it may be able to raise this limit, just
+    26                          ; check easyasm.asm first.)
+    27                          EXPECTED_END_OF_DISPATCH = $1e9f
+    28                          
+    29                          save = $ffd8
+    30                          
+    31                          * = $1e00
+    32                          
+    33                              ; $1E00: Launch menu.
+    34  1e00 a900                   lda #$00
+    35  1e02 a200                   ldx #$00
+    36                              ; $1E04: Run menu option A, argument X.
+    37  1e04 48                     pha
+    38  1e05 da                     phx
+    39  1e06 8024                   bra install
+    40                              ; $1E08: Execute user's program.
+    41                              ; A/X = address
+    42                          execute_user_program:
+    43  1e08 8d181e                 sta user_address
+    44  1e0b 8e191e                 stx user_address+1
+    45  1e0e 20631e                 jsr easyasm_to_sys
+    46  1e11 22181e                 jsr (user_address)
+    47  1e14 204c1e                 jsr sys_to_easyasm
+    48  1e17 60                     rts
+    49  1e18 0000               user_address: !byte $00, $00
+    50                              ; $1E1A: Save user's program.
+    51                              ; SETBNK, SETNAM, SETLFS already called
+    52                              ; $00fe-00ff: start address (16-bit), in data bank
+    53                              ; X/Y: end address (16-bit), in data bank
+    54  1e1a da                     phx
+    55  1e1b 5a                     phy
+    56  1e1c 20631e                 jsr easyasm_to_sys
+    57  1e1f 7a                     ply
+    58  1e20 fa                     plx
+    59  1e21 a9fe                   lda #$fe
+    60  1e23 20d8ff                 jsr save
+    61  1e26 48                     pha
+    62  1e27 204c1e                 jsr sys_to_easyasm
+    63  1e2a 68                     pla
+    64  1e2b 60                     rts
+    65                          
+    66                          install:
+    67                              ; Copy EasyAsm from $8700000 to $52000
+    68  1e2c a900                   lda #0
+    69  1e2e 8d04d7                 sta $d704
+    70  1e31 a900                   lda #^install_dma
+    71  1e33 8d02d7                 sta $d702
+    72  1e36 a91e                   lda #>install_dma
+    73  1e38 8d01d7                 sta $d701
+    74  1e3b a971                   lda #<install_dma
+    75  1e3d 8d05d7                 sta $d705
+    76                          
+    77  1e40 204c1e                 jsr sys_to_easyasm
+    78                          
+    79  1e43 fa                     plx
+    80  1e44 68                     pla
+    81  1e45 200020                 jsr $2000     ; $52000, EasyAsm dispatch
+    82                          
+    83  1e48 20631e                 jsr easyasm_to_sys
+    84  1e4b 60                     rts
+    85                          
+    86                          sys_to_easyasm:
+    87                              ; MAP $2000-$7FFF to bank 5
+    88                              ; Keep KERNAL in $E000-$FFFF
+    89  1e4c a900                   lda #$00
+    90  1e4e a20f                   ldx #$0f
+    91  1e50 a000                   ldy #$00
+    92  1e52 a30f                   ldz #$0f
+    93  1e54 5c                     map
+    94  1e55 a900                   lda #$00
+    95  1e57 a2e5                   ldx #$E5
+    96  1e59 a000                   ldy #$00
+    97  1e5b a383                   ldz #$83
+    98  1e5d 5c                     map
+    99  1e5e ea                     eom
+   100                          
+   101                              ; Set Base Page = $1Exx
+   102  1e5f a91e                   lda #$1e
+   103  1e61 5b                     tab
+   104  1e62 60                     rts
+   105                          
+   106                          easyasm_to_sys:
+   107                              ; Restore the SYS map
+   108  1e63 a900                   lda #$00
+   109  1e65 a2e0                   ldx #$E0
+   110  1e67 a000                   ldy #$00
+   111  1e69 a383                   ldz #$83
+   112  1e6b 5c                     map
+   113  1e6c ea                     eom
+   114                          
+   115                              ; Restore  Base Page
+   116  1e6d a900                   lda #$00
+   117  1e6f 5b                     tab
+   118  1e70 60                     rts
+   119                          
+   120                          install_dma:
+   121  1e71 8087                   !byte $80, $87       ; src mb  = $(0)87
+   122  1e73 8100                   !byte $81, $00       ; dest mb = $(0)00
+   123  1e75 0b00                   !byte $0b, $00
+   124  1e77 000060                 !byte $00, $00, $60  ; $6000 bytes
+   125  1e7a 000000                 !byte $00, $00, $00  ; src  $(087)00000
+   126  1e7d 002005                 !byte $00, $20, $05  ; dest $(000)52000
+   127  1e80 000000                 !byte $00, $00, $00
+   128                          
+   129                          
+   130                          !if * > EXPECTED_END_OF_DISPATCH {
+   131                              !error "EasyAsm dispatch code ends at address ", *
+   132                          }

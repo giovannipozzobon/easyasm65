@@ -3,3 +3,4 @@
 *.lst
 *.rpt
 .mypy_cache
+.DS_Store
